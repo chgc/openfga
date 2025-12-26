@@ -60,6 +60,9 @@ func RunDatastoreTestContainer(t testing.TB, engine string) DatastoreTestContain
 	switch engine {
 	case "mysql":
 		return NewMySQLTestContainer().RunMySQLTestContainer(t)
+	case "mariadb":
+		// For tests, reuse the MySQL container as MariaDB is protocol-compatible
+		return NewMySQLTestContainer().RunMySQLTestContainer(t)
 	case "postgres":
 		return NewPostgresTestContainer().RunPostgresTestContainer(t)
 	case "memory":

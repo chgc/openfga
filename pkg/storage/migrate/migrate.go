@@ -70,6 +70,23 @@ func RunMigrations(cfg MigrationConfig) error {
 		}
 		uri = dsn.FormatDSN()
 
+	case "mariadb":
+		driver = "mysql"
+		migrationsPath = assets.MariaDBMigrationDir
+
+		// Parse the database uri with the mysql drivers function for it and update username/password, if set via flags
+		dsn, err := mysql.ParseDSN(uri)
+		if err != nil {
+			return fmt.Errorf("invalid database uri: %w", err)
+		}
+		if cfg.Username != "" {
+			dsn.User = cfg.Username
+		}
+		if cfg.Password != "" {
+			dsn.Passwd = cfg.Password
+		}
+		uri = dsn.FormatDSN()
+
 	case "postgres":
 		driver = "pgx"
 		migrationsPath = assets.PostgresMigrationDir

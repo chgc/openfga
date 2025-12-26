@@ -65,6 +65,9 @@ func runValidate(_ *cobra.Command, _ []string) error {
 		db, err = mysql.New(uri, cfg)
 	case "postgres":
 		db, err = postgres.New(uri, cfg)
+	case "mariadb":
+		// MariaDB uses the MySQL driver; reuse mysql datastore implementation
+		db, err = mysql.New(uri, cfg)
 	case "sqlite":
 		db, err = sqlite.New(uri, cfg)
 	case "":

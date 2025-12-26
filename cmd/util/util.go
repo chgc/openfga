@@ -66,6 +66,9 @@ func MustBootstrapDatastore(t testing.TB, engine string) (storagefixtures.Datast
 		ds, err = postgres.New(uri, cfg)
 	case "mysql":
 		ds, err = mysql.New(uri, cfg)
+	case "mariadb":
+		// MariaDB uses the MySQL driver; reuse mysql datastore implementation
+		ds, err = mysql.New(uri, cfg)
 	case "sqlite":
 		ds, err = sqlite.New(uri, cfg)
 	default:

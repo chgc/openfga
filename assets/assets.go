@@ -5,6 +5,7 @@ import "embed"
 
 const (
 	MySQLMigrationDir    = "migrations/mysql"
+	MariaDBMigrationDir  = "migrations/mariadb"
 	PostgresMigrationDir = "migrations/postgres"
 	SqliteMigrationDir   = "migrations/sqlite"
 )

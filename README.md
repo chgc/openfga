@@ -1,6 +1,7 @@
 <div align="center">
 
 ![OpenFGA Logo](./openfga-logo.png)
+
 # OpenFGA
 
 [![Join our community](https://img.shields.io/badge/slack-cncf_%23openfga-40abb8.svg?logo=slack)](https://openfga.dev/community)
@@ -28,24 +29,25 @@ It helps developers easily model and enforce fine-grained access control in thei
 - ⚡ High-performance, developer-friendly APIs (HTTP & gRPC)
 - 🔌 Flexible storage backends (In-Memory, PostgreSQL, MySQL, SQLite beta)
 - 🧰 SDKs for [Java](https://central.sonatype.com/artifact/dev.openfga/openfga-sdk), [Node.js](https://www.npmjs.com/package/@openfga/sdk), [Go](https://github.com/openfga/go-sdk), [Python](https://github.com/openfga/python-sdk), [.NET](https://www.nuget.org/packages/OpenFga.Sdk)
-- 🌐  Several additional SDKs and tools [contributed by the community](https://github.com/openfga/community#community-projects)
+- 🌐 Several additional SDKs and tools [contributed by the community](https://github.com/openfga/community#community-projects)
 - 🧪 [CLI](https://github.com/openfga/cli) for interacting with an OpenFGA server and [testing authorization models](https://openfga.dev/docs/modeling/testing)
 - 🌿 [Terraform Provider](https://github.com/openfga/terraform-provider-openfga) for configuring OpenFGA servers as code
 - 🎮 [Playground](https://openfga.dev/docs/getting-started/setup-openfga/playground) for modeling and testing
 - 🛠 Can also be embedded as a [Go library](https://pkg.go.dev/github.com/openfga/openfga/pkg/server#example-NewServerWithOpts)
-- 🤝 Adopted by [Auth0](https://fga.dev), [Grafana Labs](https://grafana.com/), [Canonical](https://canonical.com/), [Docker](https://docker.com),  [Agicap](https://agicap.com), [Read.AI](https://read.ai) and [others](https://github.com/openfga/community/blob/main/ADOPTERS.md)
+- 🤝 Adopted by [Auth0](https://fga.dev), [Grafana Labs](https://grafana.com/), [Canonical](https://canonical.com/), [Docker](https://docker.com), [Agicap](https://agicap.com), [Read.AI](https://read.ai) and [others](https://github.com/openfga/community/blob/main/ADOPTERS.md)
 
 ---
 
 ## Table of Contents
+
 - [Quickstart](#quickstart)
 - [Installation](#installation)
-    - [Docker](#docker)
-    - [Docker Compose](#docker-compose)
-    - [Homebrew](#homebrew)
-    - [Precompiled Binaries](#precompiled-binaries)
-    - [Build from Source](#build-from-source)
-    - [Verify Installation](#verify-installation)
+  - [Docker](#docker)
+  - [Docker Compose](#docker-compose)
+  - [Homebrew](#homebrew)
+  - [Precompiled Binaries](#precompiled-binaries)
+  - [Build from Source](#build-from-source)
+  - [Verify Installation](#verify-installation)
 - [Playground](#playground)
 - [Next Steps](#next-steps)
 - [Limitations](#limitations)
@@ -60,10 +62,9 @@ It helps developers easily model and enforce fine-grained access control in thei
 > The following steps are meant for quick local setup and evaluation.  
 > When using the default **in-memory storage engine**, data is ephemeral and will be discarded once the service stops.
 >
-> For [details on configuring](https://openfga.dev/docs/getting-started/setup-openfga/configure-openfga) storage 
-> backends, tuning performance, and deploying OpenFGA securely in production-ready environments, refer to the 
+> For [details on configuring](https://openfga.dev/docs/getting-started/setup-openfga/configure-openfga) storage
+> backends, tuning performance, and deploying OpenFGA securely in production-ready environments, refer to the
 > documentation: [Running in Production](https://openfga.dev/docs/getting-started/running-in-production).
-
 
 Run OpenFGA with in-memory storage (⚠️ **not for production**):
 
@@ -206,9 +207,9 @@ Take a look at examples of how to:
 
 ## Limitations
 
-### MySQL Storage engine
+### MySQL / MariaDB Storage engine
 
-The MySQL storage engine has stricter length limits on tuple properties than other backends. See [docs](https://openfga.dev/docs/getting-started/setup-openfga/docker#configuring-data-storage).
+The MySQL/MariaDB storage engine has stricter length limits on tuple properties than other backends. See [docs](https://openfga.dev/docs/getting-started/setup-openfga/docker#configuring-data-storage).
 
 💡 OpenFGA’s MySQL adapter was contributed by @twintag — thank you!
 
@@ -216,7 +217,7 @@ The MySQL storage engine has stricter length limits on tuple properties than oth
 
 - ✅ Used in production by [Auth0 FGA](https://auth0.com/fine-grained-authorization) since December 2021
 - ⚠️ Memory storage adapter is **for development only**
-- 🗄 Supported storage: PostgreSQL 14+, MySQL 8, SQLite (beta)
+- 🗄 Supported storage: PostgreSQL 14+, MySQL 8, MariaDB, SQLite (beta)
 - 📘 See [Running in Production](https://openfga.dev/docs/best-practices/running-in-production)
 
 The OpenFGA team treats **production-impacting issues with highest priority**.

@@ -452,6 +452,12 @@ func (s *ServerContext) datastoreConfig(config *serverconfig.Config) (storage.Op
 		if err != nil {
 			return nil, nil, fmt.Errorf("initialize mysql datastore: %w", err)
 		}
+	case "mariadb":
+		// MariaDB uses the MySQL driver; reuse mysql datastore implementation
+		datastore, err = mysql.New(config.Datastore.URI, dsCfg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("initialize mariadb datastore: %w", err)
+		}
 	case "postgres":
 		datastore, err = postgres.New(config.Datastore.URI, dsCfg)
 		if err != nil {
