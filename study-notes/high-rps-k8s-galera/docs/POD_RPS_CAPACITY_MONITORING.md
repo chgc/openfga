@@ -6,6 +6,51 @@
 
 ---
 
+## 💡 TL;DR - 快速答案
+
+**問題**: 如何知道每個 Pod 能承載多少 RPS？
+
+**三種方法**:
+
+1. **理論計算（快速預估）**
+   ```bash
+   python3 tools/connection_pool_calculator.py
+   # 公式: RPS/Pod = (MaxOpenConns × 1000) / (平均延遲ms × 安全係數)
+   # 例如: (150 × 1000) / (50 × 1.5) = 2,000 RPS/Pod
+   ```
+
+2. **實時監控（實際測量）⭐ 推薦**
+   ```bash
+   kubectl port-forward -n monitoring svc/prometheus 9090:9090 &
+   python3 tools/pod_rps_monitor.py
+   # 顯示每個 Pod 的當前 RPS、容量使用率、錯誤率、延遲等
+   ```
+
+3. **壓力測試（確定最大容量）**
+   ```bash
+   # 使用 ghz 或 k6 進行漸進式負載測試
+   # 找出導致延遲或錯誤率上升的臨界 RPS 值
+   # 詳見本文檔的"容量測試方法"章節
+   ```
+
+**關鍵發現**: 實際容量 ≈ 理論容量 × 0.6-0.8（受查詢複雜度、資源限制等因素影響）
+
+**推薦工作流程**:
+```bash
+# 1. 計算理論值
+python3 tools/connection_pool_calculator.py
+
+# 2. 部署應用
+kubectl apply -f k8s-configs/k8s-openfga-mariadb-galera-deployment.yaml
+
+# 3. 監控實際值
+python3 tools/pod_rps_monitor.py
+
+# 4. 根據實際容量調整副本數或資源配置
+```
+
+---
+
 ## 📋 目錄
 
 1. [快速開始](#快速開始)
@@ -40,6 +85,45 @@ kubectl get pods -n openfga-prod -l app=openfga
 # 查看特定 Pod 的日誌，觀察請求模式
 kubectl logs -n openfga-prod <pod-name> --tail=100 | grep -i "check\|list"
 ```
+
+### 使用自動化監控工具（推薦）
+
+```bash
+# 啟動實時監控
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 &
+python3 study-notes/high-rps-k8s-galera/tools/pod_rps_monitor.py
+
+# 輸出示例:
+# ================================================================================================
+# OpenFGA Pod RPS 容量監控報告
+# ================================================================================================
+# 時間: 2025-12-31 14:30:00
+# Namespace: openfga-prod
+# 理論容量: 2000 RPS/Pod
+# ------------------------------------------------------------------------------------------------
+#
+# 🟢 HEALTHY Pod: openfga-7b8c9d5f6-abc12
+#    當前 RPS:  1,234.56 ↑
+#    容量使用:   61.7%
+#    錯誤率:      0.05%
+#    延遲 p50:   45.2ms
+#    延遲 p99:  132.8ms
+#    CPU:       850m
+#    Memory:    512Mi
+#
+# 🟡 MEDIUM Pod: openfga-7b8c9d5f6-def34
+#    當前 RPS:  1,456.78 →
+#    容量使用:   72.8%
+#    ...
+#
+# ------------------------------------------------------------------------------------------------
+# 集群總結:
+#   總 RPS:         12,345.67
+#   平均 RPS/Pod:    1,543.21
+#   集群容量使用:      61.7%
+# ================================================================================================
+```
+
 
 ---
 
