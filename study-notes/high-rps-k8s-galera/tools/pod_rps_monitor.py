@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 pod_rps_monitor.py - 自動監控每個 Pod 的 RPS 和容量使用率
 
@@ -260,20 +261,24 @@ class PodRPSMonitor:
                 
                 pod_name = parts[0]
                 cpu_str = parts[1].replace('m', '')
-                memory_str = parts[2].replace('Mi', '').replace('Gi', '')
+                memory_str_raw = parts[2]
                 
-                # 處理 Gi 單位
-                if 'Gi' in parts[2]:
-                    memory = float(memory_str) * 1024
-                else:
-                    memory = float(memory_str)
-                
+                # Parse memory with proper unit handling
                 try:
+                    if 'Gi' in memory_str_raw:
+                        memory = float(memory_str_raw.replace('Gi', '')) * 1024
+                    else:
+                        memory = float(memory_str_raw.replace('Mi', ''))
+                    
+                    cpu = float(cpu_str)
+                    
                     pod_resources[pod_name] = {
-                        'cpu_millicores': float(cpu_str),
+                        'cpu_millicores': cpu,
                         'memory_mi': memory
                     }
-                except ValueError:
+                except (ValueError, IndexError) as e:
+                    # Log parsing errors for debugging
+                    print(f"{Colors.YELLOW}Warning: Failed to parse resources for pod {pod_name}: {e}{Colors.END}", file=sys.stderr)
                     continue
             
             return pod_resources
@@ -307,7 +312,8 @@ class PodRPSMonitor:
         """
         if error_rate > 1.0:
             return f"{Colors.RED}🔴 CRITICAL{Colors.END}"
-        elif capacity_pct > 90:
+        
+        if capacity_pct > 90:
             return f"{Colors.RED}🔴 OVERLOAD{Colors.END}"
         elif capacity_pct > 80:
             return f"{Colors.RED}🟠 HIGH{Colors.END}"
@@ -501,9 +507,6 @@ class PodRPSMonitor:
         
         try:
             while True:
-                # 清屏（可選）
-                # print("\033[2J\033[H")
-                
                 pod_rps = self.get_pod_rps()
                 pod_resources = self.get_pod_resources()
                 pod_error_rate = self.get_pod_error_rate()
