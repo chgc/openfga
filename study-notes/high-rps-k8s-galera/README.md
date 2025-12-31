@@ -12,6 +12,7 @@ high-rps-k8s-galera/
 │  ├─ README.md                      # 項目概述
 │  ├─ QUICK_START.md                 # ⭐ 5分鐘快速開始
 │  ├─ QUICK_REFERENCE.md             # ⭐ 30秒速查卡
+│  ├─ POD_RPS_CAPACITY_MONITORING.md # ⭐ Pod RPS 容量監控指南
 │  ├─ MYSQL_GALERA_CONNECTION_POOL_OPTIMIZATION.md  # 深度優化指南
 │  ├─ MONITORING_AND_TROUBLESHOOTING.md              # 運維故障排除
 │  ├─ INDEX.md                       # 資源導航
@@ -19,6 +20,7 @@ high-rps-k8s-galera/
 │
 ├─ 🧮 tools/                         # 自動化工具
 │  ├─ connection_pool_calculator.py  # 連接池配置計算器
+│  ├─ pod_rps_monitor.py             # ⭐ Pod RPS 實時監控器
 │  └─ k8s_deployment_checker.py      # 部署健康檢查工具
 │
 └─ 📋 k8s-configs/                   # Kubernetes 配置檔案
@@ -46,6 +48,42 @@ MariaDB Galera:
   可用性: 99.99%
 ```
 
+## 🔍 如何知道每個 Pod 能乘載的 RPS 量？
+
+**方法 1: 理論計算（快速預估）**
+```bash
+# 使用計算器獲得理論容量
+python tools/connection_pool_calculator.py
+
+# 理論公式:
+# RPS/Pod = (MaxOpenConns × 1000) / (平均延遲ms × 安全係數)
+# 例如: (150 × 1000) / (50 × 1.5) = 2,000 RPS/Pod
+```
+
+**方法 2: 實時監控（實際測量）⭐ 推薦**
+```bash
+# 監控每個 Pod 的實際 RPS
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 &
+python tools/pod_rps_monitor.py
+
+# 顯示:
+# • 每個 Pod 的當前 RPS
+# • 容量使用百分比
+# • 錯誤率和延遲
+# • 資源使用情況
+```
+
+**方法 3: 壓力測試（確定最大容量）**
+```bash
+# 詳見 docs/POD_RPS_CAPACITY_MONITORING.md
+# 使用 ghz 或 k6 進行漸進式壓力測試
+# 找出導致延遲或錯誤率上升的臨界 RPS 值
+```
+
+💡 **實際容量 ≈ 理論容量 × 0.6-0.8**（受查詢複雜度、資源限制等因素影響）
+
+詳細指南: [docs/POD_RPS_CAPACITY_MONITORING.md](docs/POD_RPS_CAPACITY_MONITORING.md)
+
 ## 🚀 5 分鐘快速開始
 
 ### 步驟 1: 生成最優配置
@@ -67,11 +105,20 @@ kubectl apply -f k8s-configs/k8s-openfga-mariadb-galera-deployment.yaml
 python tools/k8s_deployment_checker.py
 ```
 
+### 步驟 4: 監控實際 RPS (可選)
+
+```bash
+# 如果已部署 Prometheus
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 &
+python tools/pod_rps_monitor.py
+```
+
 ## 📚 文檔指南
 
 | 文檔 | 閱讀時間 | 適合場景 |
 |------|--------|--------|
 | **QUICK_REFERENCE.md** | 5 分鐘 | 快速查詢常用命令 |
+| **POD_RPS_CAPACITY_MONITORING.md** | 15 分鐘 | ⭐ 監控實際 Pod RPS 容量 |
 | **QUICK_START.md** | 15 分鐘 | 部署和基本操作 |
 | **README.md** | 20 分鐘 | 項目概述 |
 | **MYSQL_GALERA_CONNECTION_POOL_OPTIMIZATION.md** | 60 分鐘 | 深度理解優化原理 |
@@ -82,7 +129,7 @@ python tools/k8s_deployment_checker.py
 ## 🧮 自動化工具
 
 ### connection_pool_calculator.py
-自動計算最優的連接池配置
+自動計算最優的連接池配置（理論值）
 
 ```bash
 # 運行計算器
@@ -94,6 +141,24 @@ python tools/connection_pool_calculator.py
 # ✅ 自動生成 YAML 配置
 # ✅ 成本估算 (AWS)
 # ✅ 資源預測
+```
+
+### pod_rps_monitor.py
+實時監控每個 Pod 的實際 RPS 和容量使用率
+
+```bash
+# 運行監控器（需要 Prometheus）
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 &
+python tools/pod_rps_monitor.py
+
+# 功能:
+# ✅ 實時 RPS 監控
+# ✅ 容量使用百分比
+# ✅ 錯誤率追蹤
+# ✅ 延遲統計 (p50, p99)
+# ✅ 資源使用情況
+# ✅ 彩色狀態指示器
+# ✅ 告警過載 Pod
 ```
 
 ### k8s_deployment_checker.py
@@ -160,9 +225,16 @@ python tools/k8s_deployment_checker.py
 
 ## ⚡ 快速命令速查
 
-### 查看配置
+### 計算理論配置
 ```bash
 python tools/connection_pool_calculator.py
+```
+
+### 監控實際 RPS
+```bash
+# 需要先啟動 Prometheus port-forward
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 &
+python tools/pod_rps_monitor.py
 ```
 
 ### 部署
