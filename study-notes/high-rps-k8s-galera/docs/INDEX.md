@@ -38,6 +38,16 @@ study-notes/
 │  │      • 驗證方法
 │  │      • 快速故障排除
 │  │
+│  ├─ POD_RPS_CAPACITY_MONITORING.md ⭐ 新增
+│  │  └─ 🔍 Pod RPS 容量監控完整指南 (15分鐘)
+│  │      • 如何知道每個 Pod 能承載多少 RPS
+│  │      • 理論計算 vs 實際測量
+│  │      • 實時監控方法（Prometheus）
+│  │      • 容量測試與壓力測試
+│  │      • 性能瓶頸識別
+│  │      • 自動化監控腳本
+│  │      • 告警設置
+│  │
 │  ├─ MYSQL_GALERA_CONNECTION_POOL_OPTIMIZATION.md 
 │  │  └─ 🔬 深度技術指南 (90分鐘)
 │  │      • 理論基礎和計算方法
@@ -67,12 +77,21 @@ study-notes/
 │
 ├─ 🧮 自動化工具
 │  ├─ connection_pool_calculator.py 
-│  │  └─ 連接池配置自動計算器
+│  │  └─ 連接池配置自動計算器（理論值）
 │  │      • 4種預設場景 (1K/5K/10K/20K RPS)
 │  │      • 自定義計算
 │  │      • YAML 生成
 │  │      • 成本估算
 │  │      • 資源預測
+│  │
+│  ├─ pod_rps_monitor.py ⭐ 新增
+│  │  └─ Pod RPS 實時監控器（實際值）
+│  │      • 實時 RPS 監控
+│  │      • 容量使用百分比
+│  │      • 錯誤率和延遲追蹤
+│  │      • 資源使用情況
+│  │      • 彩色狀態指示
+│  │      • 自動告警過載 Pod
 │  │
 │  └─ k8s_deployment_checker.py 
 │     └─ 部署健康檢查工具
