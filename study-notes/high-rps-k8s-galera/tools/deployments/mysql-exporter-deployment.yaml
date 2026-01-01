@@ -1,0 +1,117 @@
+---
+# MySQL Exporter Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-exporter-secret
+  namespace: openfga-prod
+type: Opaque
+stringData:
+  datasource: "root:password@tcp(mariadb-galera:3306)/"
+
+---
+# MySQL Exporter Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-exporter
+  namespace: openfga-prod
+  labels:
+    app: mysql-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-exporter
+  template:
+    metadata:
+      labels:
+        app: mysql-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9104"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: mysql-exporter
+        image: prom/mysqld-exporter:latest
+        args:
+        - "--config.my-cnf=/etc/mysql-exporter/my.cnf"
+        - "--collect.perf_schema.tableiowaits=true"
+        - "--collect.perf_schema.indexiowaits=true"
+        - "--collect.perf_schema.tablelocks=true"
+        - "--collect.perf_schema.replication_group_member_stats=true"
+        - "--collect.slave_status=true"
+        - "--collect.info_schema.innodb_cmp=true"
+        - "--collect.info_schema.innodb_cmpmem=true"
+        - "--collect.binlog_size=true"
+
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-exporter-secret
+              key: datasource
+
+        ports:
+        - name: metrics
+          containerPort: 9104
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mysql-exporter
+
+      volumes:
+      - name: config
+        configMap:
+          name: mysql-exporter-config
+
+---
+# MySQL Exporter Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-exporter
+  namespace: openfga-prod
+  labels:
+    app: mysql-exporter
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9104
+    targetPort: 9104
+  selector:
+    app: mysql-exporter
+
+---
+# MySQL Exporter ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-exporter-config
+  namespace: openfga-prod
+data:
+  my.cnf: |
+    [client]
+    host=mariadb-galera
+    user=root
+    password=password
+    port=3306
+
+---
+# OpenFGA Service Monitor Annotation
+# 在 OpenFGA Deployment 中添加以下 annotation
+# 在 Pod 模板中添加：
+# annotations:
+#   prometheus.io/scrape: "true"
+#   prometheus.io/port: "8081"
+#   prometheus.io/path: "/metrics"

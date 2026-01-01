@@ -1,0 +1,86 @@
+---
+# OpenFGA Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openfga-server
+  namespace: openfga-prod
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: openfga
+  template:
+    metadata:
+      labels:
+        app: openfga
+    spec:
+      containers:
+        - name: openfga
+          image: openfga/openfga:v1.5.0
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          env:
+            - name: OPENFGA_DATASTORE_ENGINE
+              value: "mysql"
+            - name: OPENFGA_DATASTORE_URI
+              value: "root:password@tcp(mariadb-galera:3306)/openfga"
+            - name: OPENFGA_DATASTORE_MAX_OPEN_CONNS
+              value: "150"
+            - name: OPENFGA_DATASTORE_MAX_IDLE_CONNS
+              value: "75"
+
+---
+# MariaDB Galera StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb-galera
+  namespace: openfga-prod
+spec:
+  serviceName: mariadb-galera
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mariadb-galera
+  template:
+    metadata:
+      labels:
+        app: mariadb-galera
+    spec:
+      containers:
+        - name: mariadb
+          image: bitnami/mariadb-galera:10.11
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          env:
+            - name: MARIADB_GALERA_CLUSTER_NAME
+              value: "galera-cluster"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: root-password
+
+---
+# ConfigMap for OpenFGA
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openfga-config
+  namespace: openfga-prod
+data:
+  OPENFGA_DATASTORE_MAX_OPEN_CONNS: "150"
+  OPENFGA_DATASTORE_MAX_IDLE_CONNS: "75"
+  OPENFGA_DATASTORE_CONN_MAX_IDLE_TIME: "5m"
+  OPENFGA_DATASTORE_CONN_MAX_LIFETIME: "1h"
