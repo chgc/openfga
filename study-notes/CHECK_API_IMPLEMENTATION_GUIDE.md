@@ -42,24 +42,28 @@ func (s *Server) Check(ctx context.Context, req *openfgav1.CheckRequest)
 **動作與 SQL 命令：**
 
 1. **驗證請求格式** - 無 SQL
+
    - 檢查 StoreID、TupleKey 格式
    - 驗證 user、object、relation 是否符合規範
 
 2. **授權檢查** - 可能有 SQL（如果啟用 Access Control）
+
    - `s.checkAuthz()` 檢查調用者是否有權限執行 Check
 
 3. **解析授權模型** - **SQL #1**
+
    ```go
    typesys, err := s.resolveTypesystem(ctx, storeID, req.GetAuthorizationModelId())
    ```
-   
+
    執行 SQL:
+
    ```sql
    -- 如果指定 modelID
    SELECT authorization_model_id, schema_version, serialized_protobuf
    FROM authorization_model
    WHERE store = ? AND authorization_model_id = ?
-   
+
    -- 如果未指定 modelID（使用最新版本）
    SELECT authorization_model_id, schema_version, serialized_protobuf
    FROM authorization_model
@@ -67,10 +71,11 @@ func (s *Server) Check(ctx context.Context, req *openfgav1.CheckRequest)
    ORDER BY authorization_model_id DESC
    LIMIT 1
    ```
-   
+
    **目的**: 獲取授權模型定義，包含所有 type、relation、rewrite 規則
 
 4. **構建 CheckResolver** - 無 SQL
+
    - 創建 LocalChecker（核心解析器）
    - 添加 CachedCheckResolver（查詢結果快取）
    - 添加 DispatchThrottlingResolver（限流）
@@ -89,9 +94,11 @@ func (c *CheckQuery) Execute(ctx context.Context, params *CheckCommandParams)
 **動作：**
 
 1. **驗證請求** - 無 SQL
+
    - 驗證 TupleKey 和 ContextualTuples 是否符合授權模型
 
 2. **創建 RequestStorageWrapper** - 無 SQL
+
    - 包裝 datastore，加入 contextual tuples 的內存快取
    - 設置並發控制和 throttling
 
@@ -112,20 +119,25 @@ func (c *LocalChecker) ResolveCheck(
 **動作：**
 
 1. **深度檢查** - 無 SQL
+
    - 確保未超過最大解析深度（預設 25）
    - 防止遞迴過深
 
 2. **環檢測** - 無 SQL
+
    - 檢查是否存在循環依賴
    - 使用 `VisitedPaths` map 追蹤已訪問的路徑
 
 3. **自訂規則檢查** - 無 SQL
+
    - 如果是自訂定義的關係（如 `user:alice` vs `user:alice`），直接返回 true
 
 4. **型別驗證** - 無 SQL
+
    - 從 TypeSystem 確認關係在授權模型中存在
 
 5. **路徑分析** - 無 SQL
+
    - 檢查是否存在從使用者到關係的路徑
    - 使用 TypeSystem 的圖結構分析
 
@@ -156,7 +168,7 @@ OpenFGA 支援四種主要的關係重寫方式，每種都會執行不同的 SQ
 checkDirect() - [internal/graph/check.go#L757]
 ├── checkDirectUserTuple() - [SQL #2]
 │   └── storage.ReadUserTuple()
-│       執行: SELECT object_type, object_id, relation, 
+│       執行: SELECT object_type, object_id, relation,
 │                    user_object_type, user_object_id, user_relation,
 │                    condition_name, condition_context
 │             FROM tuple
@@ -198,12 +210,14 @@ checkDirect() - [internal/graph/check.go#L757]
 ```
 
 **範例**:
+
 - 請求: `Check(document:doc1#viewer@user:alice)`
 - SQL #2 查詢: 是否存在 `document:doc1#viewer@user:alice`
 - SQL #3 查詢: 是否存在 `document:doc1#viewer@user:*`（公開訪問）
 - SQL #4 查詢: 是否存在 `document:doc1#viewer@group:eng#member`（userset 關係）
 
 **代碼位置**:
+
 - [pkg/storage/sqlite/sqlite.go#L687](pkg/storage/sqlite/sqlite.go#L687) - ReadUserTuple
 - [pkg/storage/sqlite/sqlite.go#L753](pkg/storage/sqlite/sqlite.go#L753) - ReadUsersetTuples
 
@@ -238,7 +252,8 @@ Check(document:1#viewer@user:jon)
   → 遞迴解析 editor 關係（會執行 SQL #2-#4）
 ```
 
-**特點**: 
+**特點**:
+
 - 本身不執行 SQL，只是改寫請求
 - 遞迴調用會根據目標關係的定義執行相應的 SQL
 
@@ -249,6 +264,7 @@ Check(document:1#viewer@user:jon)
 用於建立物件間的層次關係。一個物件可以從其父物件繼承權限。
 
 **關鍵約束**:
+
 - 元組集關係（tupleset）必須是直接關係，不能是計算關係
 - 元組集關係只能指向直接物件型別（如 `[folder]`），不能是使用者集（如 `[group#member]`）
 
@@ -301,6 +317,7 @@ Check(document:1#viewer@user:jon)
 ```
 
 **代碼位置**:
+
 - [internal/graph/check.go#L838](internal/graph/check.go#L838) - checkTTU
 - [pkg/storage/sqlite/sqlite.go#L158](pkg/storage/sqlite/sqlite.go#L158) - Read (用於查詢 tupleset)
 
@@ -327,14 +344,15 @@ func union(ctx context.Context, handlers ...CheckHandlerFunc) {
 ```
 Check(document:1#viewer@user:jon)  // viewer: [user] or editor
 ├── union (並行執行)
-│   ├── checkDirect(document:1#viewer@user:jon)     
+│   ├── checkDirect(document:1#viewer@user:jon)
 │   │   → [SQL #2] 查詢直接關係 → {allowed: true} ✓ 短路返回
-│   └── checkComputedUserset(document:1#editor@user:jon) 
+│   └── checkComputedUserset(document:1#editor@user:jon)
 │       → (不會執行，因為第一個已經返回 true)
 Result: {allowed: true}
 ```
 
 **特點**:
+
 - 並行執行所有分支的 SQL 查詢
 - 任一分支返回 true 立即短路，取消其他查詢
 - 只有所有分支都返回 false 才返回 false
@@ -356,6 +374,7 @@ func intersection(ctx context.Context, handlers ...CheckHandlerFunc) {
 ```
 
 **特性**:
+
 - 並行執行所有分支的 SQL 查詢
 - 任一分支返回 false 立即短路，取消其他查詢
 - 錯誤被吞併，除非有明確的 false 結果
@@ -402,6 +421,7 @@ Check(document:1#viewer@user:jon)
 ```
 
 **代碼位置**:
+
 - [internal/graph/check.go#L175](internal/graph/check.go#L175) - union
 - [internal/graph/check.go#L223](internal/graph/check.go#L223) - intersection
 - [internal/graph/check.go#L276](internal/graph/check.go#L276) - exclusion
@@ -413,19 +433,22 @@ Check(document:1#viewer@user:jon)
 Check API 執行過程中會觸發以下 SQL 命令：
 
 ### SQL #1: 讀取授權模型
+
 ```sql
 SELECT authorization_model_id, schema_version, serialized_protobuf
 FROM authorization_model
-WHERE store = ? 
+WHERE store = ?
   AND authorization_model_id = ?  -- 如果指定
 ORDER BY authorization_model_id DESC  -- 如果未指定，取最新
 LIMIT 1
 ```
+
 **執行時機**: 每個 Check 請求開始時
 **執行次數**: 1 次（有快取）
 **代碼位置**: [pkg/server/server.go#L942](pkg/server/server.go#L942)
 
 ### SQL #2: 檢查直接用戶關係
+
 ```sql
 SELECT object_type, object_id, relation,
        user_object_type, user_object_id, user_relation,
@@ -440,11 +463,13 @@ WHERE store = ?
   AND user_relation = ?
   AND user_type = ?
 ```
+
 **執行時機**: checkDirectUserTuple - 檢查直接關係時
 **執行次數**: 視關係定義和遞迴深度而定
 **代碼位置**: [pkg/storage/sqlite/sqlite.go#L687](pkg/storage/sqlite/sqlite.go#L687)
 
 ### SQL #3: 檢查公開可訪問（萬用字元）
+
 ```sql
 SELECT store, object_type, object_id, relation,
        user_object_type, user_object_id, user_relation,
@@ -458,11 +483,13 @@ WHERE store = ?
   AND user_object_type = ?
   AND user_object_id = '*'
 ```
+
 **執行時機**: checkPublicAssignable - 檢查萬用字元關係時
 **執行次數**: 視關係定義而定
 **代碼位置**: [pkg/storage/sqlite/sqlite.go#L753](pkg/storage/sqlite/sqlite.go#L753)
 
 ### SQL #4: 檢查用戶集關係
+
 ```sql
 SELECT store, object_type, object_id, relation,
        user_object_type, user_object_id, user_relation,
@@ -475,11 +502,19 @@ WHERE store = ?
   AND relation = ?
   AND (user_object_type = ? AND user_relation = ? OR ...)
 ```
+
 **執行時機**: checkDirectUsersetTuples - 檢查 userset 關係時
 **執行次數**: 視關係定義和遞迴深度而定
 **代碼位置**: [pkg/storage/sqlite/sqlite.go#L753](pkg/storage/sqlite/sqlite.go#L753)
 
+**重要說明**: 此查詢可能返回**多筆 tuple**，程式會針對每一筆結果進行額外處理：
+
+- **Default Resolver**: 對每個 userset 進行 `dispatch` (遞迴呼叫 `ResolveCheck`)，並行執行，任一返回 true 則整體為 true
+- **Recursive Resolver**: 使用廣度優先搜尋（BFS）演算法，批次處理多個 userset，避免過多的遞迴呼叫
+- **Weight-2 Resolver**: 使用雙向查詢策略，從使用者和物件兩側同時查找，尋找交集來快速判斷
+
 ### SQL #5: TTU 查詢元組集
+
 ```sql
 SELECT store, object_type, object_id, relation,
        user_object_type, user_object_id, user_relation,
@@ -490,11 +525,13 @@ WHERE store = ?
   AND object_id = ?
   AND relation = ?  -- tupleset relation
 ```
+
 **執行時機**: checkTTU - 查詢 TTU 的 tupleset 關係時
 **執行次數**: 每個 TTU 定義 1 次，但會遞迴觸發更多查詢
 **代碼位置**: [pkg/storage/sqlite/sqlite.go#L158](pkg/storage/sqlite/sqlite.go#L158)
 
 ### SQL #6: 從用戶開始查詢（ListObjects/ListUsers 場景）
+
 ```sql
 SELECT store, object_type, object_id, relation,
        user_object_type, user_object_id, user_relation,
@@ -506,6 +543,7 @@ WHERE store = ?
   AND (user_object_type = ? AND user_object_id = ? [AND user_relation = ?])
 ORDER BY object_id
 ```
+
 **執行時機**: ReadStartingWithUser - 反向查詢時使用
 **執行次數**: 取決於查詢策略
 **代碼位置**: [pkg/storage/sqlite/sqlite.go#L807](pkg/storage/sqlite/sqlite.go#L807)
@@ -513,11 +551,13 @@ ORDER BY object_id
 ### SQL 執行次數估算
 
 一個簡單的 Check 請求：
+
 - **最少**: 2 次（1 次模型 + 1 次直接關係查詢）
 - **典型**: 3-10 次（包含遞迴和多個分支）
 - **複雜**: 可能數十次（深層 TTU、多層嵌套、複雜 union/intersection）
 
 範例分析：
+
 ```
 Model:
   type folder
@@ -818,10 +858,32 @@ requestDurationHistogram      // 請求耗時
 
 ### 7.3 除錯建議
 
-1. 啟用 `ExperimentalCheckOptimizations` 特性旗標來觀察優化效果
+1. 啟用 `ExperimentalCheckOptimizations` 特性旗標來觀察優化效果（v1.8.0-v1.9.2）
 2. 檢查 `CycleDetected` 旗標以識別關係模型中的問題
 3. 監視 `DispatchCount` 以識別潛在的效能問題
 4. 使用 contextual tuples 進行假設分析
+
+### 7.4 版本相關優化（Recursive Resolver）
+
+**Recursive Resolver** 是 Check API 的關鍵性能優化，用於處理遞迴關係結構。
+
+| OpenFGA 版本    | Recursive Resolver | 啟用方式                                  | 備註         |
+| --------------- | ------------------ | ----------------------------------------- | ------------ |
+| < v1.8.0        | ❌ 無              | -                                         | 不支援       |
+| v1.8.0 - v1.9.2 | ✅ 有（實驗性）    | `OPENFGA_ENABLE_CHECK_OPTIMIZATIONS=true` | 需手動啟用   |
+| v1.9.3+         | ✅ 有（預設）      | 自動啟用                                  | 無需任何旗標 |
+| v1.10.0+        | ✅ 有（成熟）      | 自動啟用                                  | 最新最穩定   |
+
+**何時使用 Recursive Resolver**：
+
+- 授權模型包含遞迴關係（如 `organization#member`）
+- 需要檢查層級結構中的權限（如組織層級）
+- 遇到 TTU（Tuple To Userset）查詢效能問題
+
+**性能差異**：
+
+- 無 Recursive Resolver：3000+ SQL 查詢（非常慢）
+- 有 Recursive Resolver：2-3 SQL 查詢（極快）
 
 ---
 
