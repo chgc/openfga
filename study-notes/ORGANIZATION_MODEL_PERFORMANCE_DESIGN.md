@@ -45,13 +45,15 @@ type organization
 **資料結構**:
 
 ```
-# 層級關係：上層指向下層
+# 層級關係：上層指向下層（包含關係）
+# Level 1 (CEO) 包含 Level 2 (VP)，Level 2 包含 Level 3，依此類推
+# 數字越小 = 層級越高 = 包含範圍越大
 organization:level1#sub_org@organization:level2
 organization:level2#sub_org@organization:level3
 ...
 organization:level13#sub_org@organization:level14
 
-# 員工在最底層
+# 員工在最底層（Level 14 = Section）
 organization:level14#member@employee:kevin
 ```
 
@@ -189,7 +191,7 @@ def add_employee(org_id, employee_id, level):
             "user": f"employee:{employee_id}"
         }
     ])
-    # Kevin 在 level 14 → 自動擁有 level1-14 的所有權限
+    # Kevin 在 level 14 (Section) → 自動被 level1-13（上層）包含
 ```
 
 ---
@@ -276,37 +278,53 @@ organization:level9#mid_sub_org@organization:level10
 **模型定義**:
 
 ```
-
 type organization
-relations
-define sub_org: [organization] # 下屬組織
-define member: [employee, organization#member] or member from sub_org
-
+  relations
+    define sub_org: [organization]  # 下屬組織（上層指向下層）
+    define member: [employee, organization#member] or member from sub_org
 ```
 
-**關鍵點**: 允許 `organization#member` 直接作為 member，形成遞迴結構。
+**關鍵點**:
+
+- 使用 `sub_org` 關係表示「上層包含哪些下層組織」
+- `member from sub_org` 表示「從下屬組織繼承 member」
+- 允許 `organization#member` 作為直接成員（userset 快取）
+- 形成遞迴結構，自動觸發 Recursive Resolver
+
+**TTU 語義說明**：
+
+```
+當執行 Check(level1#member@kevin) 時：
+1. 查找 level1#sub_org@X（level1 的下屬組織）
+2. 對每個 X，檢查 X#member@kevin
+3. 如果 X 也有 sub_org，遞迴檢查
+4. 最終在 level14#member@kevin 找到 ✓
+```
 
 **資料結構**:
 
 ```
-
-# 層級關係（上層指向下層）
-
+# 層級關係（上層指向下層 - sub_org 關係）
+# Level 1 (CEO) 包含 Level 2 (VP)
+# Level 2 包含 Level 3，依此類推
+# Level 13 包含 Level 14 (Section)
 organization:level1#sub_org@organization:level2
 organization:level2#sub_org@organization:level3
+organization:level3#sub_org@organization:level4
 ...
+organization:level12#sub_org@organization:level13
 organization:level13#sub_org@organization:level14
 
-# 員工在最底層
-
+# 員工在最底層（Level 14 = Section）
 organization:level14#member@employee:kevin
 
-# 優化：將下層的 member 直接關聯到上層（快取概念）
-
-organization:level1#member@organization:level14#member
-organization:level2#member@organization:level14#member
+# 優化：將下層的 member 直接關聯到上層（userset 快取）
+# 表示「上層包含下層的所有 member」
+organization:level1#member@organization:level14#member  # CEO 層包含 Section 成員
+organization:level2#member@organization:level14#member  # VP 層包含 Section 成員
+organization:level3#member@organization:level14#member
 ...
-
+organization:level13#member@organization:level14#member
 ```
 
 **OpenFGA 檢測到遞迴結構時會自動使用 Recursive Resolver**!
@@ -315,65 +333,145 @@ organization:level2#member@organization:level14#member
 
 執行 `Check(organization:level1#member@employee:kevin)`:
 
+**情境 1: 有 userset 快取（使用 recursiveUserset）**
+
+```
+使用 recursiveUserset:
+
+深度 0: Check(level1#member@employee:kevin)
+  └─ 檢測到遞迴 userset 結構
+
+# 階段 1: 左側通道 - 從 object 側收集所有 userset
+[SQL #1] Read(level1, member, organization#member)
+→ 返回 userset 元組:
+   - level1#member@organization:level14#member
+   - level1#member@organization:level10#member
+   - ...
+
+建立 objectToUserset 集合 = {level14#member, level10#member, ...}
+
+# 階段 2: 右側通道 - 從 user 側反向查詢
+[SQL #2] ReadStartingWithUser(employee:kevin, member)
+→ 查找所有包含 kevin 的 member 關係:
+   - level14#member@employee:kevin
+   - (可能還有其他層級)
+
+建立 userToUserset 集合 = {level14#member, ...}
+
+# 階段 3: 雙向掃描並檢查交集（使用 sync.Map 追蹤已訪問）
+visited := sync.Map{}  # 環路檢測
+並行處理左右通道，查找交集:
+→ 找到共同的 userset: level14#member ✓
+
+返回 {allowed: true}
 ```
 
-使用 Recursive Resolver:
+**情境 2: 無 userset 快取（使用 recursiveTTU 或 defaultTTU）**
 
-深度 0: recursiveUserset(level1#member@employee:kevin)
+**如果滿足 recursiveTTU 條件**（使用 BFS 優化）:
 
-# 階段 1: 收集物件側的 userset
+```
+使用 recursiveTTU (BFS 迭代):
 
-[SQL #4] 查詢 level1#member 的所有 userset
-→ 返回: [level14#member, ...]
+深度 0: Check(level1#member@employee:kevin)
+  └─ 檢測到遞迴 TTU 結構
 
-objectToUserset = {level14#member}
+# 階段 1: 右側通道 - 從 user 側開始
+[SQL #1] ReadStartingWithUser(employee:kevin, member)
+→ 找到: level14#member@employee:kevin
+→ userObjectSet = {level14}
 
-# 階段 2: 從使用者側反向查詢
+# 階段 2: 左側通道 - 從 object 側 BFS 展開
+[SQL #2] Read(level1, sub_org, *)
+→ 找到: level1#sub_org@level2
+→ objectSet = {level2}
 
-[SQL #6] ReadStartingWithUser(employee:kevin)
-→ 返回: [level14#member]
+# 階段 3: BFS 廣度優先展開 (批次查詢)
+[SQL #3-4] 批次查詢多層 sub_org
+→ {level2, level3, level4, ..., level14}
 
-userToUserset = {level14#member}
+# 階段 4: 檢查交集（使用 hashset）
+intersection = objectSet ∩ userObjectSet
+→ 找到: level14 ✓
 
-# 階段 3: 檢查交集
+返回 {allowed: true}
+效能: 5-8 次 SQL，~80-120ms
+```
 
-intersection = objectToUserset ∩ userToUserset
-→ 找到: level14#member
+**如果不滿足 recursiveTTU 條件**（回退到 defaultTTU）:
 
-返回 {allowed: true} ✓
+```
+使用 defaultTTU (逐層遞迴):
 
+深度 0: Check(level1#member@kevin)
+[SQL #1] Read(level1, sub_org, *) → [level2]
+  → dispatch Check(level2#member@kevin)
+
+  深度 1: Check(level2#member@kevin)
+  [SQL #2] Read(level2, sub_org, *) → [level3]
+    → dispatch Check(level3#member@kevin)
+
+    深度 2-13: 繼續遞迴...
+
+    深度 13: Check(level14#member@kevin)
+    [SQL #14] 找到: level14#member@employee:kevin ✓
+
+返回 {allowed: true}
+效能: 28+ 次 SQL，~300-500ms
 ```
 
 **效能指標**:
 
-- **SQL 查詢次數**: 3-4 次（使用 BFS，非遞迴）
-- **遞迴深度**: 1-2 層（Recursive Resolver 使用迭代而非遞迴）
-- **總延遲**: ~40-80ms
-- **資料庫負載**: 低
+| 情境                | 策略               | SQL 查詢 | 深度   | 延遲      |
+| ------------------- | ------------------ | -------- | ------ | --------- |
+| 有 userset 快取     | recursiveUserset   | 2-3 次   | 1-2 層 | 20-40ms   |
+| 無快取 + 滿足條件   | recursiveTTU (BFS) | 5-8 次   | 2-3 層 | 80-120ms  |
+| 無快取 + 不滿足條件 | defaultTTU (DFS)   | 28+ 次   | 14 層  | 300-500ms |
 
-**Recursive Resolver 觸發條件**（來自程式碼）:
+**recursiveTTU 觸發條件**（來自 TypeSystem）:
+
+滿足以下**所有**條件才會使用 recursiveTTU（否則使用 defaultTTU）:
 
 1. `weight[userType] = infinite`（無限權重，表示遞迴）
-2. `RecursiveRelation = objectType#relation`（自我引用）
-3. `IsPartOfTupleCycle == false`（非環狀）
-4. 其他邊的權重 = 1
+2. `RecursiveRelation = objectType#relation`（自我引用，如 `organization#member`）
+3. `IsPartOfTupleCycle == false`（非環狀結構）
+4. 有 TTU 邊指向自己（如 `organization#member from sub_org`）
+5. 其他 union 成員（如直接的 `[employee]`）的權重 = 1
+6. OR 節點只有一個 TTU 邊是遞迴的
+
+**recursiveUserset 觸發條件**（針對 userset 關係）:
+
+滿足以下**所有**條件才會使用 recursiveUserset:
+
+1. `weight[userType] = infinite`（無限權重）
+2. 關係定義允許 `organization#member` 作為直接關係
+3. 存在 userset 元組（如 `level1#member@level14#member`）
+4. 不是 tuple cycle 的一部分
+5. 檢測到遞迴 userset 模式
+
+**關鍵差異**:
+
+- **recursiveTTU**: 處理 `member from sub_org`（TTU 關係），使用 BFS 展開 sub_org 鏈
+- **recursiveUserset**: 處理 `organization#member`（userset 關係），使用雙向掃描找交集
 
 **優點**:
 
-- ✅ **自動優化**（OpenFGA 自動選擇最佳演算法）
-- ✅ 效能優異（接近扁平化）
-- ✅ 資料結構靈活
-- ✅ 使用 BFS 而非 DFS，避免深度問題
-- ✅ 支援動態組織結構變更
+- ✅ **自動優化**（OpenFGA 根據條件選擇最佳策略）
+- ✅ **有快取時效能極佳**（recursiveUserset: 20-40ms，接近扁平化）
+- ✅ **無快取時仍可用**（recursiveTTU: 80-120ms，比 defaultTTU 快 3-5 倍）
+- ✅ 資料結構靈活，支援動態組織結構變更
+- ✅ 使用 BFS（recursiveTTU）避免深度問題
+- ✅ 使用 sync.Map（recursiveUserset）避免環路
+- ✅ 可增量建立快取（不需一次全部建立）
 
 **版本要求**:
 
-| 版本範圍 | 狀態 | 備註 |
-|---------|------|------|
-| < v1.8.0 | ❌ 不支援 | 無 Recursive Resolver 實現 |
+| 版本範圍        | 狀態              | 備註                                                    |
+| --------------- | ----------------- | ------------------------------------------------------- |
+| < v1.8.0        | ❌ 不支援         | 無 Recursive Resolver 實現                              |
 | v1.8.0 - v1.9.2 | ⚠️ 支援（需啟用） | 需要環境變數: `OPENFGA_ENABLE_CHECK_OPTIMIZATIONS=true` |
-| v1.9.3+ | ✅ 完全支援 | Check fast path v2 預設啟用，無需旗標 |
-| **v1.10.0+** | **✅✅ 推薦** | **最新版本，Recursive Resolver 完全成熟優化** |
+| v1.9.3+         | ✅ 完全支援       | Check fast path v2 預設啟用，無需旗標                   |
+| **v1.10.0+**    | **✅✅ 推薦**     | **最新版本，Recursive Resolver 完全成熟優化**           |
 
 **版本升級建議**:
 
@@ -535,8 +633,8 @@ type employee
 
 type organization
   relations
-    define parent: [organization]
-    define member: [employee, organization#member] or member from parent
+    define sub_org: [organization]
+    define member: [employee, organization#member] or member from sub_org
 
 type document
   relations
@@ -561,22 +659,24 @@ async function addEmployeeWithOptimization(
     },
   ];
 
-  // 建立層級關係
+  // 建立層級關係（上層指向下層）
+  // level1 (CEO) -> level2 (VP) -> ... -> level13 -> level14 (Section)
   for (let i = 0; i < organizationPath.length - 1; i++) {
     writes.push({
-      object: `organization:${organizationPath[i]}`,
-      relation: 'parent',
-      user: `organization:${organizationPath[i + 1]}`,
+      object: `organization:${organizationPath[i]}`, // 上層
+      relation: 'sub_org',
+      user: `organization:${organizationPath[i + 1]}`, // 下層
     });
   }
 
-  // 優化：為上層新增 userset 引用（可選，但能大幅提升效能）
-  const bottomLevel = organizationPath[organizationPath.length - 1];
+  // 優化：為上層新增 userset 快取（可選，但能大幅提升效能）
+  // 表示「上層包含下層的所有 member」
+  const bottomLevel = organizationPath[organizationPath.length - 1]; // level14
   for (let i = 0; i < organizationPath.length - 1; i++) {
     writes.push({
-      object: `organization:${organizationPath[i]}`,
+      object: `organization:${organizationPath[i]}`, // level1, level2, ...
       relation: 'member',
-      user: `organization:${bottomLevel}#member`,
+      user: `organization:${bottomLevel}#member`, // level14#member
     });
   }
 
@@ -706,10 +806,18 @@ define member: [employee] or member from parent  // 加上直接關係
 ```
 ❌ 只寫底層關係:
 organization:level14#member@employee:kevin
+# 查詢 level1 時的行為取決於是否滿足 recursiveTTU 條件：
+# - 滿足條件：使用 recursiveTTU (BFS)，5-8次SQL，80-120ms
+# - 不滿足條件：使用 defaultTTU (DFS)，28+次SQL，300-500ms
 
-✅ 同時寫 userset 關係:
+✅ 同時寫 userset 快取:
 organization:level14#member@employee:kevin
 organization:level1#member@organization:level14#member  // 加速查詢
+organization:level2#member@organization:level14#member
+# 查詢 level1 時：
+# - 觸發 recursiveUserset（雙向掃描 + 環路檢測）
+# - 2-3次SQL，20-40ms
+# - 效能接近扁平化設計！
 ```
 
 ### ❌ 陷阱 3: 沒有監控深度
@@ -736,9 +844,15 @@ if (organizationDepth > 20) {
 
 2. **最佳靈活性**: 使用**遞迴優化設計**（方案 4）
 
-   - SQL 查詢: 3-4 次
-   - 延遲: 40-80ms
-   - 自動觸發 Recursive Resolver
+   - SQL 查詢:
+     - 有 userset 快取：2-3 次（recursiveUserset）
+     - 無快取但滿足條件：5-8 次（recursiveTTU, BFS）
+     - 無快取且不滿足條件：28+ 次（defaultTTU, DFS）
+   - 延遲:
+     - 有快取：20-40ms
+     - 無快取但滿足條件：80-120ms
+     - 無快取且不滿足條件：300-500ms
+   - 自動選擇最佳策略（recursiveUserset > recursiveTTU > defaultTTU）
    - 適合動態組織結構
 
 3. **避免**: 純層次化設計（方案 1）
@@ -761,14 +875,14 @@ if (organizationDepth > 20) {
 
 ### Recursive Resolver 支援時間表
 
-| OpenFGA 版本 | Recursive Resolver | 狀態 | 建議 |
-|-------------|-------------------|------|------|
-| < v1.8.0 | ❌ 無 | 過時 | ❌ 不建議 |
-| v1.8.0 - v1.8.14 | ✅ 有（實驗性） | 需手動啟用旗標 | ⚠️ 可用 |
-| v1.8.15 | ✅ 有（改善） | 需手動啟用旗標 + 性能修復 | ✅ 可接受 |
-| v1.9.0 - v1.9.2 | ✅ 有 | 實驗性旗標，需啟用 | ✅ 良好 |
-| **v1.9.3+** | **✅ 有** | **預設啟用，無需旗標** | **✅ 推薦** |
-| **v1.10.0+** | **✅ 有** | **完整優化，最穩定** | **✅✅ 最佳** |
+| OpenFGA 版本     | Recursive Resolver | 狀態                      | 建議          |
+| ---------------- | ------------------ | ------------------------- | ------------- |
+| < v1.8.0         | ❌ 無              | 過時                      | ❌ 不建議     |
+| v1.8.0 - v1.8.14 | ✅ 有（實驗性）    | 需手動啟用旗標            | ⚠️ 可用       |
+| v1.8.15          | ✅ 有（改善）      | 需手動啟用旗標 + 性能修復 | ✅ 可接受     |
+| v1.9.0 - v1.9.2  | ✅ 有              | 實驗性旗標，需啟用        | ✅ 良好       |
+| **v1.9.3+**      | **✅ 有**          | **預設啟用，無需旗標**    | **✅ 推薦**   |
+| **v1.10.0+**     | **✅ 有**          | **完整優化，最穩定**      | **✅✅ 最佳** |
 
 ### 升級路線
 
