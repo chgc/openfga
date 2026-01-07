@@ -26,6 +26,6 @@ COPY --from=builder /bin/openfga /openfga
 
 # Healthcheck configuration for the container using grpc_health_probe
 # The container will be considered healthy if the gRPC health probe returns a successful response.
-HEALTHCHECK --interval=5s --timeout=30s --retries=3 CMD ["/usr/local/bin/grpc_health_probe", "-addr=:8081"]
+# HEALTHCHECK --interval=5s --timeout=30s --retries=3 CMD ["/usr/local/bin/grpc_health_probe", "-addr=:8081"]
 
 ENTRYPOINT ["/openfga"]
