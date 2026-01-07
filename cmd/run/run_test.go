@@ -794,6 +794,9 @@ func TestServerMetricsReporting(t *testing.T) {
 	})
 	const nonPgxPrometheusMetrics = "go_sql_idle_connections"
 	const pgxPrometheusMetrics = "pgxpool_idle_conns"
+	t.Run("mariadb", func(t *testing.T) {
+		testServerMetricsReporting(t, "mariadb", nonPgxPrometheusMetrics)
+	})
 	t.Run("mysql", func(t *testing.T) {
 		testServerMetricsReporting(t, "mysql", nonPgxPrometheusMetrics)
 	})
