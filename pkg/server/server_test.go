@@ -250,7 +250,7 @@ func TestServerPanicIfValidationsFail(t *testing.T) {
 
 func TestServerNotReadyDueToDatastoreRevision(t *testing.T) {
 	// skipping sqlite here because the lowest supported schema revision is 4
-	engines := []string{"postgres", "mysql"}
+	engines := []string{"postgres", "mysql", "mariadb"}
 
 	for _, engine := range engines {
 		t.Run(engine, func(t *testing.T) {

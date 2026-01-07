@@ -204,7 +204,7 @@
                 "engine": {
                     "description": "The datastore engine that will be used for persistence.",
                     "type": "string",
-                    "enum": ["memory", "postgres", "mysql", "sqlite"],
+                    "enum": ["memory", "postgres", "mysql", "mariadb", "sqlite"],
                     "default": "memory",
                     "x-env-variable": "OPENFGA_DATASTORE_ENGINE"
                 },
@@ -214,6 +214,7 @@
                     "examples": [
                         "postgres://user:pass@host:port/datastore?opts",
                         "user:pass@tcp(mysql-host:port)/datastore?parseTime=true&other-opts",
+                        "user:pass@tcp(mariadb-host:port)/datastore?parseTime=true&other-opts",
                         "file:/path/to/sqlite.db"
                     ],
                     "x-env-variable": "OPENFGA_DATASTORE_URI"

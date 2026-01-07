@@ -447,10 +447,10 @@ func (s *ServerContext) datastoreConfig(config *serverconfig.Config) (storage.Op
 			memory.WithMaxTuplesPerWrite(config.MaxTuplesPerWrite),
 		}
 		datastore = memory.New(opts...)
-	case "mysql":
+	case "mysql", "mariadb":
 		datastore, err = mysql.New(config.Datastore.URI, dsCfg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("initialize mysql datastore: %w", err)
+			return nil, nil, fmt.Errorf("initialize mysql-compatible datastore: %w", err)
 		}
 	case "postgres":
 		datastore, err = postgres.New(config.Datastore.URI, dsCfg)

@@ -61,7 +61,7 @@ func runValidate(_ *cobra.Command, _ []string) error {
 	)
 	cfg := sqlcommon.NewConfig()
 	switch engine {
-	case "mysql":
+	case "mysql", "mariadb":
 		db, err = mysql.New(uri, cfg)
 	case "postgres":
 		db, err = postgres.New(uri, cfg)

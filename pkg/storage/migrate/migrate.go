@@ -34,7 +34,7 @@ type MigrationConfig struct {
 // 1. Explicitly control when OpenFGA migrations run
 // 2. Integrate OpenFGA's schema updates into their own migration workflows
 // 3. Perform versioned upgrades of the schema as needed
-// The function handles migrations for multiple database engines (postgres, mysql, sqlite) and supports
+// The function handles migrations for multiple database engines (postgres, mysql, mariadb, sqlite) and supports
 // both upgrading and downgrading to specific versions.
 func RunMigrations(cfg MigrationConfig) error {
 	goose.SetLogger(goose.NopLogger())
@@ -53,9 +53,12 @@ func RunMigrations(cfg MigrationConfig) error {
 	case "memory":
 		log.Info("no migrations to run for `memory` datastore")
 		return nil
-	case "mysql":
+	case "mysql", "mariadb":
 		driver = "mysql"
 		migrationsPath = assets.MySQLMigrationDir
+		if cfg.Engine == "mariadb" {
+			migrationsPath = assets.MariaDBMigrationDir
+		}
 
 		// Parse the database uri with the mysql drivers function for it and update username/password, if set via flags
 		dsn, err := mysql.ParseDSN(uri)
